@@ -1,21 +1,29 @@
-import { redirect } from "next/navigation";
-import { getWeekOf, todayOf } from "@/lib/coach";
-import { getCurrentUser } from "@/lib/session";
+"use client";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { Splash, WithProfile } from "@/components/Guard";
 import { TabBar } from "@/components/TabBar";
+import { todayOf, weekOf, type State } from "@/lib/store";
 import { CheckInForm } from "./CheckInForm";
 
-export const dynamic = "force-dynamic";
+function Content({ s }: { s: State & { profile: NonNullable<State["profile"]> } }) {
+  const workout = useSearchParams().get("workout");
+  const today = todayOf(s.profile);
+  const w = weekOf(s, today).find((x) => (workout ? x.id === workout : x.date === today));
+  return <CheckInForm workoutId={w && w.type !== "REST" ? w.id : null} plannedKm={w && w.distanceKm > 0 ? w.distanceKm : null} />;
+}
 
-export default async function CheckInPage({ searchParams }: { searchParams: Promise<{ workout?: string }> }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/onboarding");
-  const { workout } = await searchParams;
-  const today = todayOf(user);
-  const w = (await getWeekOf(user.id, today)).find((x) => (workout ? x.id === workout : x.date === today));
+export default function CheckInPage() {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <CheckInForm workoutId={w && w.type !== "REST" ? w.id : null} plannedKm={w?.distanceKm ?? null} />
-      <TabBar />
-    </div>
+    <WithProfile>
+      {(s) => (
+        <div className="flex min-h-dvh flex-col">
+          <Suspense fallback={<Splash />}>
+            <Content s={s} />
+          </Suspense>
+          <TabBar />
+        </div>
+      )}
+    </WithProfile>
   );
 }

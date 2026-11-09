@@ -1,26 +1,17 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
-import { stravaConfigured } from "@/lib/strava";
+"use client";
+import { WithProfile } from "@/components/Guard";
 import { TabBar } from "@/components/TabBar";
 import { ProfileView } from "./ProfileView";
 
-export const dynamic = "force-dynamic";
-
-export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ strava?: string }> }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/onboarding");
-  const sp = await searchParams;
+export default function ProfilePage() {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <ProfileView
-        name={user.name}
-        autonomy={user.autonomy}
-        stravaConnected={!!user.stravaAthleteId}
-        stravaAvailable={stravaConfigured()}
-        justConnected={sp.strava === "connected"}
-        location={{ lat: user.latitude, lon: user.longitude }}
-      />
-      <TabBar />
-    </div>
+    <WithProfile>
+      {(s) => (
+        <div className="flex min-h-dvh flex-col">
+          <ProfileView profile={s.profile} runs={s.activities.length} />
+          <TabBar />
+        </div>
+      )}
+    </WithProfile>
   );
 }

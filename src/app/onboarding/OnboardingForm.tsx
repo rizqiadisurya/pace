@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { DAY_LONG, DAY_SHORT } from "@/lib/engine/dates";
+import { createProfile } from "@/lib/store";
 
 type Goal = "10K" | "HM" | "FM" | "RETURN";
 const GOALS: { id: Goal; title: string; desc: string }[] = [
@@ -49,30 +50,33 @@ export function OnboardingForm() {
     true,
   ][step];
 
-  async function submit() {
+  const paceSec = (s: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
+    return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
+  };
+
+  function submit() {
     setPending(true);
     setError(null);
-    const res = await fetch("/api/onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      createProfile({
         name: f.name,
         goalType: f.goalType,
         raceDate: f.goalType === "RETURN" ? null : f.raceDate,
-        targetPace: f.targetPace || null,
-        easyPace: f.easyPace,
-        baseWeeklyKm: Number(f.baseWeeklyKm),
-        weeksOff: Number(f.weeksOff),
+        targetPaceSec: f.targetPace && !Number.isNaN(paceSec(f.targetPace)) ? paceSec(f.targetPace) : null,
+        easyPaceSec: paceSec(f.easyPace),
+        baseWeeklyKm: Number(f.baseWeeklyKm.replace(",", ".")),
+        weeksOff: Math.max(0, Math.round(Number(f.weeksOff) || 0)),
         availableDays: f.availableDays,
         longRunDay: f.longRunDay,
         autonomy: f.autonomy,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setPending(false);
-    if (!res.ok) return setError(data.error ?? "Gagal membuat rencana.");
-    router.push("/today");
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Jakarta",
+      });
+      router.push("/today");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal membuat rencana.");
+      setPending(false);
+    }
   }
 
   return (

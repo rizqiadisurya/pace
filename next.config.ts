@@ -1,10 +1,14 @@
 import type { NextConfig } from "next";
 
+// GitHub Pages menyajikan repo di https://<user>.github.io/<repo>/ → basePath = "/<repo>".
+// Di lokal kosong. Workflow deploy mengisi NEXT_PUBLIC_BASE_PATH otomatis.
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 const nextConfig: NextConfig = {
-  // PGlite memuat file WASM dari node_modules; jangan di-bundle.
-  serverExternalPackages: ["@electric-sql/pglite"],
-  // Sertakan file migrasi di bundle serverless (dipakai PGlite lokal).
-  outputFileTracingIncludes: { "/**": ["./drizzle/**/*"] },
+  output: "export",
+  basePath,
+  trailingSlash: true,
+  images: { unoptimized: true },
 };
 
 export default nextConfig;

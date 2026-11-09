@@ -1,8 +1,14 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
+"use client";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { Splash } from "@/components/Guard";
+import { usePace } from "@/lib/usePace";
 
-export const dynamic = "force-dynamic";
-
-export default async function Home() {
-  redirect((await getCurrentUser()) ? "/today" : "/onboarding");
+export default function Home() {
+  const s = usePace();
+  const router = useRouter();
+  useEffect(() => {
+    if (s) router.replace(s.profile ? "/today" : "/onboarding");
+  }, [s, router]);
+  return <Splash />;
 }

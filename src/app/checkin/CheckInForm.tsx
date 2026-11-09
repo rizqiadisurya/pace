@@ -3,7 +3,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { IconCheck } from "@/components/icons";
-import { useAction } from "@/components/useAction";
+import { checkIn } from "@/lib/store";
+import { useRun } from "@/lib/usePace";
 
 const RPE_LABEL: Record<number, string> = {
   1: "Santai sekali", 2: "Sangat ringan", 3: "Ringan", 4: "Ringan, masih bisa ngobrol", 5: "Sedang",
@@ -17,7 +18,7 @@ const PAIN = [
 ] as const;
 
 export function CheckInForm({ workoutId, plannedKm }: { workoutId: string | null; plannedKm: number | null }) {
-  const { call, pending, error } = useAction();
+  const { run, error } = useRun();
   const [km, setKm] = useState(plannedKm ? String(plannedKm) : "");
   const [dur, setDur] = useState("");
   const [hr, setHr] = useState("");
@@ -102,11 +103,11 @@ export function CheckInForm({ workoutId, plannedKm }: { workoutId: string | null
       {error && <p className="text-[13px] text-accent-ink">{error}</p>}
       <Button
         className="mt-auto"
-        disabled={!valid || pending}
-        onClick={async () => {
-          const res = await call<{ feedback: string }>("/api/checkin", {
-            json: { workoutId, distanceKm: Number(km), durationSec: parseDur(dur), avgHr: hr ? Number(hr) : null, rpe, pain },
-          });
+        disabled={!valid}
+        onClick={() => {
+          const res = run(() =>
+            checkIn({ workoutId, distanceKm: Number(km), durationSec: parseDur(dur), avgHr: hr ? Number(hr) : null, rpe, pain }),
+          );
           if (res) setFeedback(res.feedback);
         }}
       >

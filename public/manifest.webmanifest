@@ -1,9 +1,10 @@
 {
   "name": "Pace — AI running coach",
   "short_name": "Pace",
-  "start_url": "/today",
+  "start_url": "./today/",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f6f5f1",
   "theme_color": "#f6f5f1",
-  "icons": []
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

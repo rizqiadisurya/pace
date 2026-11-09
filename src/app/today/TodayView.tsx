@@ -1,14 +1,15 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import type { Brief } from "@/lib/coach";
+import { useState } from "react";
+import { applySwap, listSwapOptions, resolveAdjustment, saveSignal, type Brief } from "@/lib/store";
+import { useRun, useTimeAdvice } from "@/lib/usePace";
 import { DAY_SHORT, dayOfWeek, formatDateId, formatKm, formatPace, isRun, workoutTitle, type Workout } from "@/lib/engine";
 import { Button, Card, Chip } from "@/components/ui";
 import { IconCheck, IconRefresh, IconWind } from "@/components/icons";
-import { useAction } from "@/components/useAction";
 
 export function TodayView({ brief, greeting }: { brief: Brief; greeting: string }) {
   const { today, adjustment, original } = brief;
+  const advice = useTimeAdvice(brief.location.lat, brief.location.lon, brief.location.timezone, brief.date);
   return (
     <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-12">
       <header className="flex items-end justify-between">
@@ -37,10 +38,10 @@ export function TodayView({ brief, greeting }: { brief: Brief; greeting: string 
         </Card>
       )}
       {adjustment?.status === "APPLIED" && <UndoLink id={adjustment.id} />}
-      {brief.timeAdvice && (
+      {advice && today && isRun(today.type) && today.status === "PLANNED" && (
         <div className="flex items-start gap-2.5 rounded-[14px] bg-accent-soft px-3.5 py-3 text-[13px] leading-snug text-accent-ink">
           <IconWind size={18} className="mt-px shrink-0" />
-          <span>{brief.timeAdvice}</span>
+          <span>{advice}</span>
         </div>
       )}
       <WeekStrip week={brief.week} today={brief.date} />
@@ -49,7 +50,7 @@ export function TodayView({ brief, greeting }: { brief: Brief; greeting: string 
 }
 
 function SignalCard() {
-  const { call, pending, error } = useAction();
+  const { run, error } = useRun();
   const [sleep, setSleep] = useState<number | null>(null);
   const [feeling, setFeeling] = useState<"FRESH" | "OK" | "TIRED" | null>(null);
   const sleeps = [
@@ -97,7 +98,7 @@ function SignalCard() {
         ))}
       </div>
       {error && <p className="text-[13px] text-accent-ink">{error}</p>}
-      <Button disabled={pending || (sleep === null && feeling === null)} onClick={() => call("/api/signals", { json: { sleepHours: sleep, feeling } })}>
+      <Button disabled={sleep === null && feeling === null} onClick={() => run(() => saveSignal({ sleepHours: sleep, feeling }))}>
         Simpan
       </Button>
     </Card>
@@ -192,7 +193,7 @@ function TodayCard({ brief, today, original }: { brief: Brief; today: Workout; o
               Swap
             </Button>
             <Link
-              href={`/today/skip/${today.id}`}
+              href={`/today/skip?id=${today.id}`}
               className="inline-flex h-12 flex-1 items-center justify-center rounded-[14px] border border-dark-line text-[15px] font-semibold hover:bg-dark-2"
             >
               Skip
@@ -221,7 +222,7 @@ function Tile({ label, value }: { label: string; value: string }) {
 }
 
 function ProposalCard({ id, reason, proposed, suggestOnly }: { id: string; reason: string; proposed: Workout; suggestOnly: boolean }) {
-  const { call, pending, error } = useAction();
+  const { run, error } = useRun();
   return (
     <Card className="flex flex-col gap-3 border-accent/30">
       <span className="text-xs font-semibold uppercase tracking-wider text-accent">{suggestOnly ? "Saran Pace" : "Pace mengusulkan"}</span>
@@ -229,10 +230,10 @@ function ProposalCard({ id, reason, proposed, suggestOnly }: { id: string; reaso
       <p className="text-sm leading-relaxed text-muted">{reason}</p>
       {error && <p className="text-[13px] text-accent-ink">{error}</p>}
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1" disabled={pending} onClick={() => call(`/api/adjustments/${id}`, { json: { action: "dismiss" } })}>
+        <Button variant="outline" className="flex-1" onClick={() => run(() => resolveAdjustment(id, "dismiss"))}>
           Tetap rencana awal
         </Button>
-        <Button className="flex-1" disabled={pending} onClick={() => call(`/api/adjustments/${id}`, { json: { action: "accept" } })}>
+        <Button className="flex-1" onClick={() => run(() => resolveAdjustment(id, "accept"))}>
           Terima
         </Button>
       </div>
@@ -241,11 +242,10 @@ function ProposalCard({ id, reason, proposed, suggestOnly }: { id: string; reaso
 }
 
 function UndoLink({ id }: { id: string }) {
-  const { call, pending } = useAction();
+  const { run } = useRun();
   return (
     <button
-      disabled={pending}
-      onClick={() => call(`/api/adjustments/${id}`, { json: { action: "undo" } })}
+      onClick={() => run(() => resolveAdjustment(id, "undo"))}
       className="min-h-11 self-center text-[13px] font-medium text-accent underline underline-offset-2"
     >
       Kembalikan ke rencana awal
@@ -254,31 +254,18 @@ function UndoLink({ id }: { id: string }) {
 }
 
 function SwapSheet({ workoutId, onClose }: { workoutId: string; onClose: () => void }) {
-  const { call, pending, error } = useAction();
-  const [options, setOptions] = useState<{ key: string; label: string; detail: string }[] | null>(null);
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/workouts/${workoutId}/swap`)
-      .then((r) => r.json())
-      .then((d) => alive && setOptions(d.options ?? []))
-      .catch(() => alive && setOptions([]));
-    return () => {
-      alive = false;
-    };
-  }, [workoutId]);
+  const { run, error } = useRun();
+  const options = run(() => listSwapOptions(workoutId)) ?? [];
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" role="dialog" aria-modal="true" aria-label="Pilih alternatif" onClick={onClose}>
       <div className="mx-auto w-full max-w-md rounded-t-3xl bg-surface p-5 pb-8 text-ink" onClick={(e) => e.stopPropagation()}>
         <h3 className="mb-3 text-lg font-semibold">Ganti sesi hari ini</h3>
-        {options === null && <p className="text-sm text-muted">Memuat pilihan…</p>}
         <div className="flex flex-col gap-2">
-          {options?.map((o) => (
+          {options.map((o) => (
             <button
               key={o.key}
-              disabled={pending}
-              onClick={async () => {
-                const ok = await call(`/api/workouts/${workoutId}/swap`, { json: { key: o.key } });
-                if (ok) onClose();
+              onClick={() => {
+                if (run(() => applySwap(workoutId, o.key)) !== null) onClose();
               }}
               className="rounded-2xl border border-line p-3.5 text-left hover:bg-bg"
             >

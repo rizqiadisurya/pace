@@ -1,13 +1,13 @@
-import { notFound, redirect } from "next/navigation";
+"use client";
 import Link from "next/link";
-import { previewSkip } from "@/lib/coach";
-import { DAY_SHORT, dayOfWeek, workoutTitle, type Workout } from "@/lib/engine";
-import { getCurrentUser, HttpError } from "@/lib/session";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { WithProfile, Splash } from "@/components/Guard";
 import { IconBack, IconShield } from "@/components/icons";
-import { Chip } from "@/components/ui";
-import { ConfirmSkip } from "./ConfirmSkip";
-
-export const dynamic = "force-dynamic";
+import { Button, Chip } from "@/components/ui";
+import { DAY_SHORT, dayOfWeek, workoutTitle, type Workout } from "@/lib/engine";
+import { applySkip, previewSkip } from "@/lib/store";
+import { useRun } from "@/lib/usePace";
 
 function tagFor(before: Workout | undefined, after: Workout): string | null {
   if (!before) return null;
@@ -16,17 +16,20 @@ function tagFor(before: Workout | undefined, after: Workout): string | null {
   return null;
 }
 
-export default async function SkipPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/onboarding");
-  const { id } = await params;
-  let preview;
-  try {
-    preview = await previewSkip(user, id);
-  } catch (e) {
-    if (e instanceof HttpError && e.status === 404) notFound();
-    throw e;
-  }
+function SkipContent() {
+  const id = useSearchParams().get("id") ?? "";
+  const router = useRouter();
+  const { run, error } = useRun();
+  const preview = run(() => previewSkip(id));
+  if (!preview)
+    return (
+      <main className="flex min-h-dvh flex-col gap-4 p-5 pt-12">
+        <p>{error ?? "Sesi tidak ditemukan."}</p>
+        <Link href="/today" className="text-accent underline">
+          Kembali
+        </Link>
+      </main>
+    );
   const { before, week, notes } = preview;
   return (
     <main className="flex min-h-dvh flex-col">
@@ -62,7 +65,31 @@ export default async function SkipPage({ params }: { params: Promise<{ id: strin
           Sesi berat tetap berjarak minimal 48 jam. Volume minggu ini tidak bertambah.
         </div>
       </div>
-      <ConfirmSkip id={id} />
+      <div className="flex flex-col gap-2 px-5 pb-9">
+        {error && <p className="text-[13px] text-accent-ink">{error}</p>}
+        <Button
+          onClick={() => {
+            if (run(() => applySkip(id))) router.push("/today");
+          }}
+        >
+          Terapkan perubahan
+        </Button>
+        <Link href="/today" className="inline-flex h-12 items-center justify-center rounded-[14px] text-[15px] font-medium hover:bg-chip">
+          Batal, aku tetap lari
+        </Link>
+      </div>
     </main>
+  );
+}
+
+export default function SkipPage() {
+  return (
+    <WithProfile>
+      {() => (
+        <Suspense fallback={<Splash />}>
+          <SkipContent />
+        </Suspense>
+      )}
+    </WithProfile>
   );
 }

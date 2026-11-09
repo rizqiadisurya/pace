@@ -1,7 +1,9 @@
 "use client";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, Card } from "@/components/ui";
-import { useAction } from "@/components/useAction";
+import { exportData, resetAll, updateProfile, type Profile } from "@/lib/store";
+import { useRun } from "@/lib/usePace";
 
 const MODES = [
   { id: "AUTO", title: "Auto", desc: "Pace langsung menyesuaikan, kamu diberi tahu tiap pagi." },
@@ -9,30 +11,36 @@ const MODES = [
   { id: "SUGGEST", title: "Saran saja", desc: "Rencana tidak pernah berubah otomatis." },
 ] as const;
 
-export function ProfileView(p: {
-  name: string;
-  autonomy: "AUTO" | "ASK" | "SUGGEST";
-  stravaConnected: boolean;
-  stravaAvailable: boolean;
-  justConnected: boolean;
-  location: { lat: number; lon: number };
-}) {
-  const { call, pending, error, router } = useAction();
-  const [msg, setMsg] = useState<string | null>(p.justConnected ? "Strava terhubung." : null);
+export function ProfileView({ profile, runs }: { profile: Profile; runs: number }) {
+  const router = useRouter();
+  const { run, error } = useRun();
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function download() {
+    const blob = new Blob([exportData()], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `pace-${profile.name.toLowerCase().replace(/\W+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 
   return (
     <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-12">
-      <h1 className="font-display text-[28px] font-semibold tracking-tight">{p.name}</h1>
+      <h1 className="font-display text-[28px] font-semibold tracking-tight">{profile.name}</h1>
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-[15px] font-semibold">Seberapa bebas Pace mengubah rencanamu?</legend>
         {MODES.map((m) => (
-          <label key={m.id} className={`flex cursor-pointer items-start gap-3 rounded-[14px] bg-surface p-3.5 ${p.autonomy === m.id ? "border-[1.5px] border-ink" : "border border-line"}`}>
+          <label
+            key={m.id}
+            className={`flex cursor-pointer items-start gap-3 rounded-[14px] bg-surface p-3.5 ${profile.autonomy === m.id ? "border-[1.5px] border-ink" : "border border-line"}`}
+          >
             <input
               type="radio"
               name="autonomy"
-              checked={p.autonomy === m.id}
-              onChange={() => call("/api/me", { method: "PATCH", json: { autonomy: m.id } })}
+              checked={profile.autonomy === m.id}
+              onChange={() => run(() => updateProfile({ autonomy: m.id }))}
               className="mt-0.5 h-5 w-5 accent-ink"
             />
             <span>
@@ -44,38 +52,18 @@ export function ProfileView(p: {
       </fieldset>
 
       <Card className="flex flex-col gap-3">
-        <h2 className="text-[15px] font-semibold">Strava</h2>
-        {!p.stravaAvailable ? (
-          <p className="text-[13px] text-muted">Belum dikonfigurasi. Isi STRAVA_CLIENT_ID dan STRAVA_CLIENT_SECRET di .env.</p>
-        ) : p.stravaConnected ? (
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={async () => {
-              const r = await call<{ imported: number }>("/api/strava/sync", { method: "POST" });
-              if (r) setMsg(`${r.imported} lari baru diimpor.`);
-            }}
-          >
-            Sinkronkan aktivitas
-          </Button>
-        ) : (
-          <a href="/api/strava/connect" className="inline-flex h-12 items-center justify-center rounded-[14px] bg-[#fc4c02] font-semibold text-white">
-            Hubungkan Strava
-          </a>
-        )}
-      </Card>
-
-      <Card className="flex flex-col gap-3">
         <h2 className="text-[15px] font-semibold">Lokasi untuk cuaca & AQI</h2>
         <p className="text-[13px] text-muted">
-          {p.location.lat.toFixed(3)}, {p.location.lon.toFixed(3)}
+          {profile.latitude.toFixed(3)}, {profile.longitude.toFixed(3)} (default Jakarta)
         </p>
         <Button
           variant="outline"
-          disabled={pending}
           onClick={() =>
             navigator.geolocation?.getCurrentPosition(
-              (pos) => call("/api/me", { method: "PATCH", json: { latitude: pos.coords.latitude, longitude: pos.coords.longitude } }),
+              (pos) => {
+                run(() => updateProfile({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+                setMsg("Lokasi diperbarui.");
+              },
               () => setMsg("Izin lokasi ditolak."),
             )
           }
@@ -84,15 +72,25 @@ export function ProfileView(p: {
         </Button>
       </Card>
 
+      <Card className="flex flex-col gap-3">
+        <h2 className="text-[15px] font-semibold">Data kamu</h2>
+        <p className="text-[13px] leading-relaxed text-muted">
+          Semua data tersimpan hanya di perangkat ini ({runs} lari tercatat). Unduh untuk dikirim ke tim riset atau sebagai cadangan.
+        </p>
+        <Button variant="outline" onClick={download}>
+          Unduh data (JSON)
+        </Button>
+      </Card>
+
       {(msg || error) && <p className="text-[13px] text-accent-ink">{error ?? msg}</p>}
 
       <Button
         variant="ghost"
         className="mt-auto text-accent-ink"
-        disabled={pending}
-        onClick={async () => {
-          if (!confirm("Hapus profil, rencana, dan semua data lari?")) return;
-          if (await call("/api/me", { method: "DELETE" })) router.push("/onboarding");
+        onClick={() => {
+          if (!confirm("Hapus profil, rencana, dan semua data lari di perangkat ini?")) return;
+          resetAll();
+          router.replace("/onboarding");
         }}
       >
         Hapus semua data
