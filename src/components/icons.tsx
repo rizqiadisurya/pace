@@ -35,6 +35,12 @@ export const IconUser = ({ size, className }: P) => (
     <path d="M4 21a8 8 0 0 1 16 0" />
   </svg>
 );
+export const IconPlus = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v8M8 12h8" />
+  </svg>
+);
 export const IconRefresh = ({ size, className }: P) => (
   <svg {...base(size)} className={className}>
     <path d="M21 12a9 9 0 1 1-3-6.7" />

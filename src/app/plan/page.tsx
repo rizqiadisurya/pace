@@ -1,10 +1,18 @@
 "use client";
+import { useEffect } from "react";
 import { WithProfile } from "@/components/Guard";
 import { TabBar } from "@/components/TabBar";
 import { DAY_SHORT, dayOfWeek, formatKm, weekKm, workoutTitle, type Workout } from "@/lib/engine";
 import { todayOf } from "@/lib/store";
 
 const PHASE: Record<string, string> = { COMEBACK: "Comeback", BASE: "Base", BUILD: "Build", PEAK: "Peak", TAPER: "Taper" };
+
+function ScrollToCurrent() {
+  useEffect(() => {
+    document.getElementById("minggu-ini")?.scrollIntoView({ block: "start" });
+  }, []);
+  return null;
+}
 
 export default function PlanPage() {
   return (
@@ -16,11 +24,12 @@ export default function PlanPage() {
         return (
           <div className="flex min-h-dvh flex-col">
             <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-12">
+              <ScrollToCurrent />
               <h1 className="font-display text-[28px] font-semibold tracking-tight">Rencana</h1>
               {[...weeks.entries()].map(([n, ws]) => {
                 const current = ws.some((w) => w.date === today);
                 return (
-                  <section key={n} className={`rounded-[20px] border bg-surface p-4 ${current ? "border-ink" : "border-line-soft"}`} aria-label={`Minggu ${n}`}>
+                  <section key={n} id={current ? "minggu-ini" : undefined} className={`scroll-mt-4 rounded-[20px] border bg-surface p-4 ${current ? "border-ink" : "border-line-soft"}`} aria-label={`Minggu ${n}`}>
                     <div className="mb-2 flex items-baseline justify-between">
                       <h2 className="text-[15px] font-semibold">
                         Minggu {n} <span className="font-medium text-muted">· {PHASE[ws[0].phase]}</span>

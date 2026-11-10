@@ -1,12 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconCalendar, IconChart, IconSun, IconUser } from "./icons";
+import { IconCalendar, IconPlus, IconSun, IconUser } from "./icons";
 
 const tabs = [
   { href: "/today", label: "Hari ini", Icon: IconSun },
   { href: "/plan", label: "Rencana", Icon: IconCalendar },
-  { href: "/checkin", label: "Catat lari", Icon: IconChart },
+  { href: "/checkin", label: "Catat lari", Icon: IconPlus },
   { href: "/profile", label: "Profil", Icon: IconUser },
 ];
 

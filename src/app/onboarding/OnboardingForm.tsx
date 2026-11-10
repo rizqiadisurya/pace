@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import { DAY_LONG, DAY_SHORT } from "@/lib/engine/dates";
 import { createProfile } from "@/lib/store";
+import { PaceStepper } from "@/components/inputs";
 
 type Goal = "10K" | "HM" | "FM" | "RETURN";
 const GOALS: { id: Goal; title: string; desc: string }[] = [
@@ -30,8 +31,8 @@ export function OnboardingForm() {
     name: "",
     goalType: "HM" as Goal,
     raceDate: "",
-    targetPace: "",
-    easyPace: "7:00",
+    targetPace: null as number | null,
+    easyPace: 420,
     baseWeeklyKm: "15",
     weeksOff: "0",
     availableDays: [0, 2, 3, 5, 6],
@@ -45,15 +46,10 @@ export function OnboardingForm() {
   const steps = ["Target", "Kondisi", "Jadwal", "Otonomi"];
   const canNext = [
     f.name.trim() && (f.goalType === "RETURN" || f.raceDate),
-    /^\d{1,2}:\d{2}$/.test(f.easyPace) && f.baseWeeklyKm !== "",
+    f.baseWeeklyKm.trim() !== "" && !Number.isNaN(Number(f.baseWeeklyKm.replace(",", "."))),
     f.availableDays.length >= 2 && f.availableDays.includes(f.longRunDay),
     true,
   ][step];
-
-  const paceSec = (s: string) => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
-    return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
-  };
 
   function submit() {
     setPending(true);
@@ -63,8 +59,8 @@ export function OnboardingForm() {
         name: f.name,
         goalType: f.goalType,
         raceDate: f.goalType === "RETURN" ? null : f.raceDate,
-        targetPaceSec: f.targetPace && !Number.isNaN(paceSec(f.targetPace)) ? paceSec(f.targetPace) : null,
-        easyPaceSec: paceSec(f.easyPace),
+        targetPaceSec: f.targetPace,
+        easyPaceSec: f.easyPace,
         baseWeeklyKm: Number(f.baseWeeklyKm.replace(",", ".")),
         weeksOff: Math.max(0, Math.round(Number(f.weeksOff) || 0)),
         availableDays: f.availableDays,
@@ -115,15 +111,30 @@ export function OnboardingForm() {
               ))}
             </div>
             {f.goalType !== "RETURN" && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-4">
                 <label className={label}>
                   Tanggal race
                   <input type="date" className={input} value={f.raceDate} onChange={(e) => set("raceDate", e.target.value)} />
                 </label>
-                <label className={label}>
-                  Target pace (ops.)
-                  <input className={input} value={f.targetPace} onChange={(e) => set("targetPace", e.target.value)} placeholder="6:00" inputMode="numeric" />
-                </label>
+                {f.targetPace === null ? (
+                  <button
+                    type="button"
+                    onClick={() => set("targetPace", Math.max(180, f.easyPace - 60))}
+                    className="min-h-11 self-start text-[14px] font-medium text-accent underline underline-offset-2"
+                  >
+                    + Tambah target pace race (opsional)
+                  </button>
+                ) : (
+                  <div className={label}>
+                    <span className="flex items-baseline justify-between">
+                      Target pace race
+                      <button type="button" onClick={() => set("targetPace", null)} className="-my-3 min-h-11 text-[13px] font-medium text-muted">
+                        Hapus
+                      </button>
+                    </span>
+                    <PaceStepper label="Target pace race" value={f.targetPace} onChange={(v) => set("targetPace", v)} />
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -132,17 +143,18 @@ export function OnboardingForm() {
         {step === 1 && (
           <>
             <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">Kondisimu sekarang</h1>
-            <label className={label}>
-              Pace santai yang nyaman (mm:ss per km)
-              <input className={input} value={f.easyPace} onChange={(e) => set("easyPace", e.target.value)} inputMode="numeric" />
-            </label>
+            <div className={label}>
+              <span>Pace santai yang nyaman</span>
+              <span className="text-[12px] font-normal">Pace saat kamu masih bisa ngobrol tanpa terengah.</span>
+              <PaceStepper label="Pace santai" value={f.easyPace} onChange={(v) => set("easyPace", v)} />
+            </div>
             <label className={label}>
               Rata-rata km per minggu, 4 minggu terakhir
-              <input className={input} value={f.baseWeeklyKm} onChange={(e) => set("baseWeeklyKm", e.target.value)} inputMode="decimal" />
+              <input className={input} value={f.baseWeeklyKm} onChange={(e) => set("baseWeeklyKm", e.target.value)} inputMode="decimal" placeholder="mis. 15" />
             </label>
             <label className={label}>
               Sudah berapa minggu tidak lari? (0 jika masih rutin)
-              <input className={input} value={f.weeksOff} onChange={(e) => set("weeksOff", e.target.value)} inputMode="numeric" />
+              <input className={input} value={f.weeksOff} onChange={(e) => set("weeksOff", e.target.value.replace(/\D/g, ""))} inputMode="numeric" pattern="[0-9]*" />
             </label>
             {Number(f.weeksOff) >= 4 && (
               <p className="rounded-[14px] bg-ok-soft p-3.5 text-[13px] leading-relaxed text-ok-ink">

@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { WithProfile, Splash } from "@/components/Guard";
 import { IconBack, IconShield } from "@/components/icons";
 import { Button, Chip } from "@/components/ui";
@@ -11,7 +11,7 @@ import { useRun } from "@/lib/usePace";
 
 function tagFor(before: Workout | undefined, after: Workout): string | null {
   if (!before) return null;
-  if (after.status === "SKIPPED") return "Skip";
+  if (after.status === "SKIPPED") return "Dilewati";
   if (before.type !== after.type || before.distanceKm !== after.distanceKm) return before.type === "REST" ? "Baru" : "Pindah";
   return null;
 }
@@ -20,11 +20,17 @@ function SkipContent() {
   const id = useSearchParams().get("id") ?? "";
   const router = useRouter();
   const { run, error } = useRun();
-  const preview = run(() => previewSkip(id));
+  const preview = useMemo(() => {
+    try {
+      return previewSkip(id);
+    } catch {
+      return null;
+    }
+  }, [id]);
   if (!preview)
     return (
       <main className="flex min-h-dvh flex-col gap-4 p-5 pt-12">
-        <p>{error ?? "Sesi tidak ditemukan."}</p>
+        <p>Sesi tidak ditemukan.</p>
         <Link href="/today" className="text-accent underline">
           Kembali
         </Link>
@@ -37,7 +43,7 @@ function SkipContent() {
         <Link href="/today" aria-label="Kembali" className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface">
           <IconBack />
         </Link>
-        <span className="text-[15px] font-semibold">Skip hari ini</span>
+        <span className="text-[15px] font-semibold">Lewati sesi hari ini</span>
       </div>
       <div className="flex flex-1 flex-col gap-4 p-5">
         <div className="flex flex-col gap-1.5">

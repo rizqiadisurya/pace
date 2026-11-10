@@ -135,7 +135,7 @@ export function decideToday(input: DecideInput): Decision {
       kind: "DOWNGRADE",
       changed: true,
       week: placed.week,
-      reason: `${signals} ${where}, minggu ini tetap on track.`.trim(),
+      reason: `${signals} Hari ini cukup lari santai. ${where}, minggu ini tetap on track.`.trim(),
       notes: [],
     };
   }

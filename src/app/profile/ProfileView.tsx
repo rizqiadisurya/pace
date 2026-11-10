@@ -54,7 +54,9 @@ export function ProfileView({ profile, runs }: { profile: Profile; runs: number 
       <Card className="flex flex-col gap-3">
         <h2 className="text-[15px] font-semibold">Lokasi untuk cuaca & AQI</h2>
         <p className="text-[13px] text-muted">
-          {profile.latitude.toFixed(3)}, {profile.longitude.toFixed(3)} (default Jakarta)
+          {Math.abs(profile.latitude + 6.2088) < 0.001 && Math.abs(profile.longitude - 106.8456) < 0.001
+            ? "Saat ini: Jakarta (default). Pakai lokasimu agar saran jam lari lebih akurat."
+            : "Saat ini: lokasimu. Saran cuaca dan AQI mengikuti lokasi ini."}
         </p>
         <Button
           variant="outline"

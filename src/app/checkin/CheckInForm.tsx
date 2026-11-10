@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { IconCheck } from "@/components/icons";
 import { checkIn } from "@/lib/store";
+import { DurationInput } from "@/components/inputs";
 import { useRun } from "@/lib/usePace";
 
 const RPE_LABEL: Record<number, string> = {
@@ -17,20 +18,17 @@ const PAIN = [
   { v: "OTHER", l: "Lainnya" },
 ] as const;
 
-export function CheckInForm({ workoutId, plannedKm }: { workoutId: string | null; plannedKm: number | null }) {
+export function CheckInForm({ workoutId, plannedKm, sessionTitle }: { workoutId: string | null; plannedKm: number | null; sessionTitle: string | null }) {
   const { run, error } = useRun();
   const [km, setKm] = useState(plannedKm ? String(plannedKm) : "");
-  const [dur, setDur] = useState("");
+  const [mm, setMm] = useState("");
+  const [ss, setSs] = useState("");
   const [hr, setHr] = useState("");
   const [rpe, setRpe] = useState(4);
   const [pain, setPain] = useState<(typeof PAIN)[number]["v"]>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const parseDur = (s: string) => {
-    const parts = s.split(":").map(Number);
-    if (parts.some(isNaN)) return NaN;
-    return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0] * 60;
-  };
+  const durationSec = (Number(mm) || 0) * 60 + Math.min(59, Number(ss) || 0);
 
   if (feedback)
     return (
@@ -46,22 +44,26 @@ export function CheckInForm({ workoutId, plannedKm }: { workoutId: string | null
       </main>
     );
 
-  const valid = Number(km) > 0 && parseDur(dur) > 0;
+  const valid = Number(km) > 0 && durationSec > 0;
+  const field = "h-12 w-full rounded-xl border border-line bg-surface px-3 text-lg font-semibold tabular-nums text-ink placeholder:font-normal placeholder:text-[#a3a6ad]";
   return (
     <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-12">
-      <h1 className="font-display text-[28px] font-semibold tracking-tight">Catat lari</h1>
-      <Card className="grid grid-cols-3 gap-3">
-        <label className="flex flex-col gap-1 text-[11px] text-muted">
+      <div>
+        <h1 className="font-display text-[28px] font-semibold tracking-tight">Catat lari</h1>
+        <p className="text-[13px] text-muted">{sessionTitle ? `Sesi hari ini: ${sessionTitle}` : "Lari di luar rencana"}</p>
+      </div>
+      <Card className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
           Jarak (km)
-          <input inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value.replace(",", "."))} className="h-11 rounded-xl border border-line px-3 text-base font-semibold text-ink" placeholder="5.0" />
+          <input inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value.replace(",", "."))} className={field} placeholder="Jarak" />
         </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted">
-          Durasi (mm:ss)
-          <input inputMode="numeric" value={dur} onChange={(e) => setDur(e.target.value)} className="h-11 rounded-xl border border-line px-3 text-base font-semibold text-ink" placeholder="35:00" />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted">
-          Avg HR (ops.)
-          <input inputMode="numeric" value={hr} onChange={(e) => setHr(e.target.value)} className="h-11 rounded-xl border border-line px-3 text-base font-semibold text-ink" placeholder="142" />
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted">Durasi</span>
+          <DurationInput minutes={mm} seconds={ss} onChange={(m, s) => (setMm(m), setSs(s))} />
+        </div>
+        <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+          Rata-rata detak jantung (opsional)
+          <input inputMode="numeric" pattern="[0-9]*" value={hr} onChange={(e) => setHr(e.target.value.replace(/\D/g, ""))} className={field} placeholder="bpm, dari jam tangan" />
         </label>
       </Card>
       <Card className="flex flex-col gap-3.5">
@@ -106,7 +108,7 @@ export function CheckInForm({ workoutId, plannedKm }: { workoutId: string | null
         disabled={!valid}
         onClick={() => {
           const res = run(() =>
-            checkIn({ workoutId, distanceKm: Number(km), durationSec: parseDur(dur), avgHr: hr ? Number(hr) : null, rpe, pain }),
+            checkIn({ workoutId, distanceKm: Number(km), durationSec, avgHr: hr ? Number(hr) : null, rpe, pain }),
           );
           if (res) setFeedback(res.feedback);
         }}

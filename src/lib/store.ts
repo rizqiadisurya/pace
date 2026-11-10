@@ -509,7 +509,9 @@ export function briefFrom(s: State, now?: Date) {
     phase: today?.phase ?? null,
     readiness: { ...readiness, label: LEVEL_LABEL[readiness.level] },
     hasSignalToday: !!signalOf(s, date),
+    signal: signalOf(s, date),
     today,
+    doneActivity: today ? (s.activities.filter((a) => a.workoutId === today.id).at(-1) ?? null) : null,
     original: adjustment?.status === "APPLIED" ? (adjustment.before.find((w) => w.date === date) ?? null) : null,
     adjustment: adjustment
       ? {
