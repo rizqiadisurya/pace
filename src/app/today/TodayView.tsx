@@ -1,18 +1,23 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { applySwap, listSwapOptions, resolveAdjustment, saveSignal, type Brief } from "@/lib/store";
+import { applySwap, listSwapOptions, resolveAdjustment, saveSignal, type Activity, type Brief } from "@/lib/store";
+import type { Insight } from "@/lib/engine";
+import { SyncBar } from "@/components/SyncBar";
+import { Insights } from "@/components/Insights";
+import { RatePending } from "@/components/RatePending";
 import { useRun, useTimeAdvice } from "@/lib/usePace";
 import { DAY_SHORT, TYPE_LABEL, dayOfWeek, formatDateId, formatKm, formatPace, isRun, workoutTitle, type Workout } from "@/lib/engine";
 import type { Feeling } from "@/lib/engine/readiness";
 import { Button, Card, Chip } from "@/components/ui";
 import { IconCheck, IconRefresh, IconWind } from "@/components/icons";
 
-export function TodayView({ brief, greeting }: { brief: Brief; greeting: string }) {
+export function TodayView({ brief, greeting, insights, pending }: { brief: Brief; greeting: string; insights: Insight[]; pending: Activity | null }) {
   const { today, adjustment } = brief;
   const [editingSignal, setEditingSignal] = useState(false);
   const advice = useTimeAdvice(brief.location.lat, brief.location.lon, brief.location.timezone, brief.date);
   const showCheckIn = (!brief.hasSignalToday || editingSignal) && today?.status !== "DONE";
+  const deviceNoFeeling = brief.signal?.source === "DEVICE" && !brief.signal.feeling && !editingSignal && today?.status !== "DONE";
 
   return (
     <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-12">
@@ -26,11 +31,10 @@ export function TodayView({ brief, greeting }: { brief: Brief; greeting: string 
         </h1>
       </header>
 
-      {showCheckIn ? (
-        <CheckInSignal initialSleep={brief.signal?.sleepHours ?? null} onDone={() => setEditingSignal(false)} />
-      ) : brief.hasSignalToday ? (
-        <ReadinessCard r={brief.readiness} onEdit={today?.status === "DONE" ? undefined : () => setEditingSignal(true)} />
-      ) : null}
+      <SyncBar autoMinutes={120} />
+
+      {/* Check-in manual tetap di atas karena jawabannya mengubah sesi hari ini */}
+      {showCheckIn && <CheckInSignal initialSleep={brief.signal?.sleepHours ?? null} onDone={() => setEditingSignal(false)} />}
 
       {today ? (
         <TodayCard brief={brief} today={today} />
@@ -42,6 +46,14 @@ export function TodayView({ brief, greeting }: { brief: Brief; greeting: string 
       )}
 
       {adjustment?.status === "APPLIED" && today?.status === "PLANNED" && <UndoLink id={adjustment.id} />}
+
+      {pending && <RatePending activity={pending} today={brief.date} />}
+      {deviceNoFeeling && <FeelingOnly signal={brief.signal!} />}
+      {!showCheckIn && brief.hasSignalToday && (
+        <ReadinessCard r={brief.readiness} onEdit={today?.status === "DONE" ? undefined : () => setEditingSignal(true)} />
+      )}
+
+      <Insights items={insights} limit={3} />
 
       {advice && today && isRun(today.type) && today.status === "PLANNED" && (
         <div className="flex items-start gap-2.5 rounded-[14px] bg-accent-soft px-3.5 py-3 text-[13px] leading-snug text-accent-ink" role="note">
@@ -121,6 +133,34 @@ function CheckInSignal({ initialSleep, onDone }: { initialSleep: number | null; 
           </div>
         </>
       )}
+      {error && <p className="text-[13px] text-accent-ink">{error}</p>}
+    </Card>
+  );
+}
+
+function FeelingOnly({ signal }: { signal: NonNullable<Brief["signal"]> }) {
+  const { run, error } = useRun();
+  const parts = [
+    signal.sleepHours != null ? `tidur ${formatKm(signal.sleepHours)} jam` : null,
+    signal.hrvDeltaPct != null ? `HRV ${signal.hrvDeltaPct > 0 ? "+" : signal.hrvDeltaPct < 0 ? "−" : ""}${Math.abs(signal.hrvDeltaPct)}% dari baseline` : null,
+  ].filter(Boolean);
+  return (
+    <Card className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-[15px] font-semibold">Badanmu terasa…</h2>
+        <p className="text-[13px] text-muted">Dari Garmin: {parts.join(", ")}. Perasaanmu melengkapi datanya.</p>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {FEELINGS.map((f) => (
+          <button
+            key={f.v}
+            className="h-11 rounded-xl border border-line bg-bg text-[14px] font-semibold active:bg-ink active:text-white"
+            onClick={() => run(() => saveSignal({ feeling: f.v }))}
+          >
+            {f.l}
+          </button>
+        ))}
+      </div>
       {error && <p className="text-[13px] text-accent-ink">{error}</p>}
     </Card>
   );

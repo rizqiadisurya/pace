@@ -183,3 +183,18 @@ describe("skip & swap", () => {
     for (const o of opts) expect(spacingViolations(o.week)).toEqual([]);
   });
 });
+
+import { analyzeRun } from "./analysis";
+
+describe("analyzeRun", () => {
+  const paces = pacesFor(baseInput); // easy 7:00, tempo 5:50
+  const w = (type: Workout["type"], km: number): Workout => ({ id: "w", date: "2026-11-10", week: 1, phase: "BASE", type, distanceKm: km, description: "", status: "DONE" });
+  const run = (km: number, paceSec: number, avgHr: number | null = null) => ({ id: "r", date: "2026-11-10", distanceKm: km, durationSec: km * paceSec, avgHr, rpe: null, pain: null, workoutId: "w" });
+
+  it("easy sesuai rencana", () => expect(analyzeRun(run(6, 430), w("EASY", 6), paces, null).verdict).toBe("ON_TARGET"));
+  it("easy terlalu cepat", () => expect(analyzeRun(run(6, 390), w("EASY", 6), paces, null).verdict).toBe("TOO_FAST"));
+  it("easy HR terlalu tinggi lebih diutamakan", () => expect(analyzeRun(run(6, 430, 160), w("EASY", 6), paces, [130, 148, 162, 175, 190]).verdict).toBe("TOO_HARD"));
+  it("long run lebih pendek", () => expect(analyzeRun(run(8, 440), w("LONG", 12), paces, null).verdict).toBe("SHORT"));
+  it("tempo terlalu cepat", () => expect(analyzeRun(run(6, 320), w("TEMPO", 6), paces, null).verdict).toBe("TOO_FAST"));
+  it("lari di hari istirahat", () => expect(analyzeRun(run(5, 430), w("REST", 0), paces, null).verdict).toBe("UNPLANNED"));
+});

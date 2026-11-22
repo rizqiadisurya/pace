@@ -129,13 +129,15 @@ export function decideToday(input: DecideInput): Decision {
       tw.distanceKm = slotKm;
       tw.description = describe("EASY", slotKm, input.paces);
     }
-    const where = placed.placed ? `${TYPE(original)} dipindah ke ${formatDateId(placed.placed.date).split(",")[0]}` : `${TYPE(original)} dilepas minggu ini`;
+    const where = placed.placed
+      ? `${TYPE(original)} dipindah ke ${formatDateId(placed.placed.date).split(",")[0]}, minggu ini tetap on track.`
+      : `${TYPE(original)} minggu ini dilepas supaya latihan tidak menumpuk.`;
     return {
       ...base,
       kind: "DOWNGRADE",
       changed: true,
       week: placed.week,
-      reason: `${signals} Hari ini cukup lari santai. ${where}, minggu ini tetap on track.`.trim(),
+      reason: `${signals} Hari ini cukup lari santai. ${where}`.trim(),
       notes: [],
     };
   }

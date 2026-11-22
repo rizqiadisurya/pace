@@ -146,3 +146,78 @@ describe("dashboard", () => {
     expect(d.prediction).toBeNull();
   });
 });
+
+describe("sinkron Garmin/Strava", () => {
+  beforeEach(() => setup());
+  const garminRun = (over: Partial<store.SyncedActivityIn> = {}): store.SyncedActivityIn => ({
+    source: "GARMIN", externalId: "g1", date: "2026-11-09", startLocal: "2026-11-09T05:40:00", name: "Lari pagi",
+    distanceKm: 6.1, durationSec: 2040, avgHr: 158, maxHr: 172, trainingLoad: 90, aerobicTE: 3.4, ...over,
+  });
+
+  it("lari Garmin menandai sesi hari ini selesai dan meminta RPE", () => {
+    const sum = store.importSynced([{ activities: [garminRun()] }], NOW);
+    expect(sum).toMatchObject({ newRuns: 1, matchedSessions: 1, merged: 0 });
+    const s = store.load();
+    expect(s.workouts.find((w) => w.date === "2026-11-09")!.status).toBe("DONE");
+    expect(store.pendingRating(s, NOW)?.externalIds).toEqual(["GARMIN:g1"]);
+  });
+
+  it("lari yang sama dari Strava digabung, bukan dobel; sinkron ulang idempoten", () => {
+    store.importSynced([{ activities: [garminRun()] }], NOW);
+    const strava = { ...garminRun(), source: "STRAVA" as const, externalId: "s9", startLocal: "2026-11-09T05:41:30", distanceKm: 6.08 };
+    const sum = store.importSynced([{ activities: [strava] }], NOW);
+    expect(sum).toMatchObject({ newRuns: 0, merged: 1 });
+    expect(store.load().activities).toHaveLength(1);
+    expect(store.load().activities[0].externalIds).toEqual(["GARMIN:g1", "STRAVA:s9"]);
+    expect(store.importSynced([{ activities: [garminRun(), strava] }], NOW)).toMatchObject({ newRuns: 0, merged: 0 });
+  });
+
+  it("lari manual diperbarui dengan angka perangkat, RPE manual tetap", () => {
+    const t = store.load().workouts.find((w) => w.date === "2026-11-09")!;
+    store.checkIn({ workoutId: t.id, distanceKm: 6, durationSec: 2100, rpe: 6 }, NOW);
+    store.importSynced([{ activities: [garminRun()] }], NOW);
+    const a = store.load().activities;
+    expect(a).toHaveLength(1);
+    expect(a[0]).toMatchObject({ distanceKm: 6.1, durationSec: 2040, rpe: 6, avgHr: 158, source: "GARMIN" });
+  });
+
+  it("tidur & HRV dari Garmin mengisi readiness dan memicu usulan agent", () => {
+    const sum = store.importSynced(
+      [{ activities: [], signals: [{ date: "2026-11-09", sleepHours: 4.6, sleepScore: 52, hrvDeltaPct: -16, hrvStatus: "UNBALANCED", bodyBatteryCharged: 30 }] }],
+      NOW,
+    );
+    expect(sum.signalsUpdated).toBe(1);
+    const b = store.briefFrom(store.load(), NOW);
+    expect(b.signal?.source).toBe("DEVICE");
+    expect(b.readiness.factors.map((f) => f.key)).toEqual(["sleep", "hrv"]);
+    expect(b.adjustment?.status).toBe("PROPOSED"); // tempo → easy diusulkan
+  });
+
+  it("jawaban tidur manual tidak ditimpa perangkat; HRV ditambahkan", () => {
+    store.saveSignal({ sleepHours: 7.5, feeling: "OK" }, NOW);
+    store.importSynced([{ activities: [], signals: [{ date: "2026-11-09", sleepHours: 5, sleepScore: 60, hrvDeltaPct: -5, hrvStatus: "BALANCED", bodyBatteryCharged: 50 }] }], NOW);
+    const sig = store.load().signals.find((x) => x.date === "2026-11-09")!;
+    expect(sig).toMatchObject({ sleepHours: 7.5, hrvDeltaPct: -5, feeling: "OK", source: "MANUAL" });
+  });
+
+  it("rateActivity mengisi RPE", () => {
+    store.importSynced([{ activities: [garminRun()] }], NOW);
+    const a = store.load().activities[0];
+    store.rateActivity(a.id, 7, "KNEE");
+    expect(store.load().activities[0]).toMatchObject({ rpe: 7, pain: "KNEE" });
+    expect(store.pendingRating(store.load(), NOW)).toBeNull();
+  });
+
+  it("analisa: easy run dengan HR di atas zona 2 → saran pelankan", () => {
+    // jadikan hari ini easy run
+    const s = store.load();
+    Object.assign(s.workouts.find((w) => w.date === "2026-11-09")!, { type: "EASY", distanceKm: 6 });
+    store.importSynced([{ activities: [garminRun()], hrZones: [130, 148, 162, 175, 190] }], NOW);
+    const ins = store.insightsFrom(store.load(), NOW);
+    const run = ins.find((i) => i.id.startsWith("run-"))!;
+    expect(run.title).toMatch(/HR terlalu tinggi/);
+    expect(run.tone).toBe("warn");
+    expect(ins.some((i) => i.id.startsWith("rpe-"))).toBe(true);
+    expect(ins.some((i) => i.id === "next")).toBe(true);
+  });
+});

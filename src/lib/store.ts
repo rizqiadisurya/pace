@@ -23,6 +23,7 @@ import {
   type Readiness,
   type SwapOption,
   type Workout,
+  nextSteps,
 } from "./engine";
 import type { Feeling } from "./engine/readiness";
 
@@ -59,6 +60,15 @@ export interface Activity {
   pain: Pain | null;
   workoutId: string | null;
   createdAt: string;
+  /** Asal data; tidak ada = MANUAL (data lama) */
+  source?: "MANUAL" | "GARMIN" | "STRAVA";
+  /** Mis. ["GARMIN:123", "STRAVA:99"] — satu lari bisa datang dari dua sumber */
+  externalIds?: string[];
+  startLocal?: string | null;
+  name?: string | null;
+  maxHr?: number | null;
+  trainingLoad?: number | null;
+  aerobicTE?: number | null;
 }
 
 export interface Signal {
@@ -66,6 +76,11 @@ export interface Signal {
   sleepHours: number | null;
   hrvDeltaPct: number | null;
   feeling: Feeling | null;
+  /** MANUAL = diisi pengguna; DEVICE = dari Garmin */
+  source?: "MANUAL" | "DEVICE";
+  sleepScore?: number | null;
+  hrvStatus?: string | null;
+  bodyBatteryCharged?: number | null;
 }
 
 export interface Adjustment {
@@ -86,6 +101,8 @@ export interface State {
   activities: Activity[];
   signals: Signal[];
   adjustments: Adjustment[];
+  /** Batas atas zona HR 1..5 dari Garmin */
+  hrZones?: number[] | null;
 }
 
 export class PaceError extends Error {}
@@ -252,7 +269,15 @@ export function saveSignal(input: { sleepHours?: number | null; hrvDeltaPct?: nu
   const s = load();
   const p = requireProfile(s);
   const date = todayOf(p, now);
-  const sig: Signal = { date, sleepHours: input.sleepHours ?? null, hrvDeltaPct: input.hrvDeltaPct ?? null, feeling: input.feeling ?? null };
+  const prev = signalOf(s, date);
+  const sig: Signal = {
+    ...(prev ?? {}),
+    date,
+    sleepHours: input.sleepHours ?? prev?.sleepHours ?? null,
+    hrvDeltaPct: input.hrvDeltaPct ?? prev?.hrvDeltaPct ?? null,
+    feeling: input.feeling ?? null,
+    source: "MANUAL",
+  };
   commit({ ...s, signals: [...s.signals.filter((x) => x.date !== date), sig] });
   return recomputeDaily(now);
 }
@@ -451,6 +476,7 @@ export function checkIn(input: CheckInInput, now?: Date): { activity: Activity; 
     pain: input.pain ?? null,
     workoutId: input.workoutId ?? null,
     createdAt: nowIso(),
+    source: "MANUAL",
   };
   const next: State = {
     ...s,
@@ -666,4 +692,189 @@ export function formatDuration(sec: number): string {
   const m = Math.floor((t % 3600) / 60);
   const ss = t % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}` : `${m}:${String(ss).padStart(2, "0")}`;
+}
+
+// ---------- sinkronisasi Garmin / Strava ----------
+
+export interface SyncedActivityIn {
+  source: "GARMIN" | "STRAVA";
+  externalId: string;
+  date: string;
+  startLocal: string;
+  name: string | null;
+  distanceKm: number;
+  durationSec: number;
+  avgHr: number | null;
+  maxHr: number | null;
+  trainingLoad: number | null;
+  aerobicTE: number | null;
+}
+export interface SyncedSignalIn {
+  date: string;
+  sleepHours: number | null;
+  sleepScore: number | null;
+  hrvDeltaPct: number | null;
+  hrvStatus: string | null;
+  bodyBatteryCharged: number | null;
+}
+export interface SyncBatch {
+  activities: SyncedActivityIn[];
+  signals?: SyncedSignalIn[];
+  hrZones?: number[] | null;
+}
+
+export interface ImportSummary {
+  newRuns: number;
+  merged: number;
+  matchedSessions: number;
+  signalsUpdated: number;
+}
+
+const minutesBetween = (a?: string | null, b?: string | null) =>
+  a && b ? Math.abs(new Date(a + "Z").getTime() - new Date(b + "Z").getTime()) / 60000 : null;
+
+/** Lari yang sama dari sumber lain: tanggal sama, mulai ≤ 15 menit, jarak selisih ≤ 5%. */
+function findDuplicate(list: Activity[], a: SyncedActivityIn): Activity | undefined {
+  return list.find((x) => {
+    if (x.date !== a.date) return false;
+    const closeDist = Math.abs(x.distanceKm - a.distanceKm) <= Math.max(0.2, a.distanceKm * 0.05);
+    if (!closeDist) return false;
+    const mins = minutesBetween(x.startLocal, a.startLocal);
+    // lari manual tanpa jam mulai: cocok jika jarak & tanggal sama dan belum punya sumber perangkat
+    return mins === null ? !x.externalIds?.length : mins <= 15;
+  });
+}
+
+/**
+ * Masukkan hasil sinkron: deteksi duplikat lintas sumber, tandai sesi rencana selesai,
+ * isi sinyal tidur/HRV, lalu hitung ulang keputusan hari ini bila perlu.
+ */
+export function importSynced(batches: SyncBatch[], now?: Date): ImportSummary {
+  let s = load();
+  const p = requireProfile(s);
+  const today = todayOf(p, now);
+  const summary: ImportSummary = { newRuns: 0, merged: 0, matchedSessions: 0, signalsUpdated: 0 };
+  const activities = [...s.activities];
+  let workouts = [...s.workouts];
+
+  // Garmin dulu (data lebih kaya), lalu Strava
+  const incoming = batches.flatMap((b) => b.activities).sort((a, b) => (a.source === b.source ? 0 : a.source === "GARMIN" ? -1 : 1));
+  for (const a of incoming) {
+    if (a.date > today) continue;
+    const key = `${a.source}:${a.externalId}`;
+    if (activities.some((x) => x.externalIds?.includes(key))) continue;
+    const dup = findDuplicate(activities, a);
+    if (dup) {
+      const i = activities.indexOf(dup);
+      const fromDevice = dup.source === "MANUAL" || !dup.source;
+      activities[i] = {
+        ...dup,
+        // angka dari perangkat lebih akurat daripada input manual
+        distanceKm: fromDevice ? a.distanceKm : dup.distanceKm,
+        durationSec: fromDevice ? a.durationSec : dup.durationSec,
+        avgHr: dup.avgHr ?? a.avgHr,
+        maxHr: dup.maxHr ?? a.maxHr,
+        trainingLoad: dup.trainingLoad ?? a.trainingLoad,
+        aerobicTE: dup.aerobicTE ?? a.aerobicTE,
+        startLocal: dup.startLocal ?? a.startLocal,
+        name: dup.name ?? a.name,
+        source: fromDevice ? a.source : dup.source,
+        externalIds: [...(dup.externalIds ?? []), key],
+      };
+      summary.merged++;
+      continue;
+    }
+    // Cocokkan ke sesi rencana di tanggal yang sama
+    const planned = workouts.find(
+      (w) => w.date === a.date && w.status === "PLANNED" && w.type !== "REST" && w.type !== "MOBILITY" && !activities.some((x) => x.workoutId === w.id),
+    );
+    if (planned) {
+      workouts = workouts.map((w) => (w.id === planned.id ? { ...w, status: "DONE" } : w));
+      summary.matchedSessions++;
+    }
+    activities.push({
+      id: uid(),
+      date: a.date,
+      distanceKm: a.distanceKm,
+      durationSec: a.durationSec,
+      avgHr: a.avgHr,
+      rpe: null,
+      pain: null,
+      workoutId: planned?.id ?? null,
+      createdAt: nowIso(),
+      source: a.source,
+      externalIds: [key],
+      startLocal: a.startLocal,
+      name: a.name,
+      maxHr: a.maxHr,
+      trainingLoad: a.trainingLoad,
+      aerobicTE: a.aerobicTE,
+    });
+    summary.newRuns++;
+  }
+
+  // Sinyal dari perangkat: isi yang kosong, jangan timpa jawaban manual pengguna
+  const signals = [...s.signals];
+  let todayChanged = false;
+  for (const sg of batches.flatMap((b) => b.signals ?? [])) {
+    if (sg.date > today) continue;
+    const i = signals.findIndex((x) => x.date === sg.date);
+    const prev = i >= 0 ? signals[i] : null;
+    const manual = prev?.source === "MANUAL";
+    const next: Signal = {
+      date: sg.date,
+      sleepHours: manual && prev?.sleepHours != null ? prev.sleepHours : (sg.sleepHours ?? prev?.sleepHours ?? null),
+      hrvDeltaPct: sg.hrvDeltaPct ?? prev?.hrvDeltaPct ?? null,
+      feeling: prev?.feeling ?? null,
+      source: manual ? "MANUAL" : "DEVICE",
+      sleepScore: sg.sleepScore ?? prev?.sleepScore ?? null,
+      hrvStatus: sg.hrvStatus ?? prev?.hrvStatus ?? null,
+      bodyBatteryCharged: sg.bodyBatteryCharged ?? prev?.bodyBatteryCharged ?? null,
+    };
+    if (next.sleepHours == null && next.hrvDeltaPct == null) continue;
+    const changed = JSON.stringify(prev) !== JSON.stringify(next);
+    if (!changed) continue;
+    if (i >= 0) signals[i] = next;
+    else signals.push(next);
+    summary.signalsUpdated++;
+    if (sg.date === today) todayChanged = true;
+  }
+
+  const zones = batches.map((b) => b.hrZones).find((z) => Array.isArray(z) && z.length === 5) ?? s.hrZones ?? null;
+  s = { ...s, activities, workouts, signals, hrZones: zones };
+  commit(s);
+  if (todayChanged || summary.newRuns > 0) recomputeDaily(now);
+  return summary;
+}
+
+/** Isi/ubah RPE & nyeri untuk lari (mis. hasil sinkron yang belum punya RPE). */
+export function rateActivity(activityId: string, rpe: number, pain: Pain | null = null) {
+  if (rpe < 1 || rpe > 10) throw new PaceError("RPE harus 1–10.");
+  const s = load();
+  if (!s.activities.some((a) => a.id === activityId)) throw new PaceError("Lari tidak ditemukan.");
+  commit({ ...s, activities: s.activities.map((a) => (a.id === activityId ? { ...a, rpe, pain } : a)) });
+}
+
+/** Lari hasil sinkron terbaru yang belum diberi RPE (≤ 3 hari). */
+export function pendingRating(s: State, now?: Date): Activity | null {
+  const p = requireProfile(s);
+  const today = todayOf(p, now);
+  return (
+    [...s.activities]
+      .filter((a) => a.rpe == null && a.source && a.source !== "MANUAL" && diffDays(today, a.date) <= 3)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
+  );
+}
+
+/** Saran "langkah berikutnya" dari seluruh data di perangkat. */
+export function insightsFrom(s: State, now?: Date) {
+  const p = requireProfile(s);
+  return nextSteps({
+    today: todayOf(p, now),
+    workouts: s.workouts,
+    runs: s.activities,
+    signals: s.signals,
+    paces: pacesOf(p),
+    hrZones: s.hrZones ?? null,
+  });
 }

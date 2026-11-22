@@ -1,7 +1,7 @@
 "use client";
 import { WithProfile } from "@/components/Guard";
 import { TabBar } from "@/components/TabBar";
-import { dashboardFrom } from "@/lib/store";
+import { dashboardFrom, insightsFrom } from "@/lib/store";
 import { ProgressView } from "./ProgressView";
 
 export default function ProgressPage() {
@@ -9,7 +9,7 @@ export default function ProgressPage() {
     <WithProfile>
       {(s) => (
         <div className="flex min-h-dvh flex-col">
-          <ProgressView d={dashboardFrom(s)} />
+          <ProgressView d={dashboardFrom(s)} insights={insightsFrom(s)} />
           <TabBar />
         </div>
       )}

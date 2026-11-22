@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { TabBar } from "@/components/TabBar";
 import { WithProfile } from "@/components/Guard";
-import { briefFrom, runDailyAgent, todayOf } from "@/lib/store";
+import { briefFrom, insightsFrom, pendingRating, runDailyAgent, todayOf } from "@/lib/store";
 import { TodayView } from "./TodayView";
 
 function greetingFor(tz: string) {
@@ -28,7 +28,7 @@ export default function TodayPage() {
       {(s) => (
         <div className="flex min-h-dvh flex-col">
           <AgentRunner date={todayOf(s.profile)} />
-          <TodayView brief={briefFrom(s)} greeting={greetingFor(s.profile.timezone)} />
+          <TodayView brief={briefFrom(s)} greeting={greetingFor(s.profile.timezone)} insights={insightsFrom(s)} pending={pendingRating(s)} />
           <TabBar />
         </div>
       )}

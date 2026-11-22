@@ -4,7 +4,8 @@ Pace menyesuaikan rencana latihan lari setiap hari berdasarkan tidur, HRV, rasa 
 Kamu cukup lari, rencananya yang menyesuaikan.
 
 Versi ini **local-first**: seluruh agent berjalan di browser dan data tersimpan di perangkat pengguna (localStorage).
-Tidak ada server, login, maupun database, jadi app bisa di-host gratis di **GitHub Pages**.
+Tidak ada login maupun database, jadi app bisa di-host gratis di **GitHub Pages**.
+Sinkronisasi **Garmin** dan **Strava** (opsional) lewat penghubung kecil di Vercel: lihat [`sync-api/`](sync-api/README.md).
 Versi full-stack (Next.js API + Postgres/Neon + Strava) ada di branch [`server-postgres`](../../tree/server-postgres).
 
 ## Menjalankan
@@ -30,7 +31,9 @@ Kalau deploy pertama gagal karena Pages belum aktif, aktifkan lalu buka **Action
 src/
 ├─ lib/engine/      Agent engine murni (plan, readiness, conditions, decide, reschedule, guardrails) + test
 ├─ lib/store.ts     Store local-first: profil, rencana, sinyal, aktivitas, adjustment (Undo) di localStorage
-├─ lib/usePace.ts   Hook React: state reaktif, runner aksi, saran jam lari dari Open-Meteo (cuaca + AQI)
+├─ lib/usePace.ts   Hook React: state reaktif, runner aksi, sinkron, saran jam lari dari Open-Meteo (cuaca + AQI)
+├─ lib/sync.ts      Klien sinkron Garmin/Strava (konfigurasi & token terpisah dari data ekspor)
+├─ lib/engine/analysis.ts  Analisa lari vs rencana (pace, zona HR, jarak) + saran "langkah berikutnya"
 ├─ components/      UI primitives, tab bar, guard profil
 └─ app/             Halaman: onboarding, today, today/skip, checkin, plan, progress (dashboard), profile
 ```
@@ -65,6 +68,16 @@ Halaman **Progres** merangkum persiapan menuju event target:
 
 Logikanya ada di `dashboardFrom()` (src/lib/store.ts) dan dites di `store.test.ts`.
 
+## Sinkron Garmin & Strava → analisa langkah berikutnya
+
+Setelah diatur (Profil → Sinkronisasi), Pace menyinkronkan otomatis saat halaman Hari ini dibuka (bila data > 2 jam):
+
+- **Lari** dari Garmin dan Strava masuk; lari yang sama dari dua sumber digabung (tanggal sama, mulai ≤ 15 menit, jarak ±5%). Sesi rencana di tanggal itu ditandai selesai.
+- **Tidur & HRV** dari Garmin mengisi readiness otomatis (jawaban manual tidak ditimpa). Readiness turun → agent mengusulkan sesi lebih ringan.
+- **Zona HR** Garmin dipakai untuk menilai easy run (HR di atas zona 2 = terlalu berat).
+- **RPE**: perangkat tidak tahu seberapa berat rasanya, jadi Pace meminta RPE untuk lari hasil sinkron.
+- **Langkah berikutnya**: nyeri, analisa lari terakhir vs rencana, tren easy run terlalu kencang, beban 7 hari vs 4 minggu, tidur/HRV beberapa hari, sesi terlewat, progres pace di HR serupa, dan sesi berikutnya.
+
 ## Untuk riset Fase 0
 
 - Bagikan link Pages ke peserta; mereka buka di HP lalu **Add to Home Screen**.
@@ -73,6 +86,6 @@ Logikanya ada di `dashboardFrom()` (src/lib/store.ts) dan dites di `store.test.t
 
 ## Keterbatasan
 
-- Tanpa Strava (butuh server untuk menyimpan client secret). Lihat branch `server-postgres`.
+- Strava/Garmin butuh sync API pribadi (Vercel). Strava app baru hanya untuk akun pemilik (Single Player Mode).
 - Bobot readiness dan target volume masih asumsi awal; perlu kalibrasi dengan data beta dan review pelatih.
 - Saran latihan bukan pengganti nasihat medis.

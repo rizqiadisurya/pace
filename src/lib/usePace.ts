@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { assessConditions, timeAdvice } from "./engine";
 import { load, subscribe, type State } from "./store";
+import { getSyncConfig, subscribeSync, syncNow, syncReady, type SyncConfig } from "./sync";
 
 /** State Pace dari perangkat. null saat render statis / sebelum hydrate. */
 export function usePace(): State | null {
@@ -76,4 +77,40 @@ export function useTimeAdvice(lat?: number, lon?: number, tz?: string, date?: st
     };
   }, [lat, lon, tz, date]);
   return advice;
+}
+
+// ---------- sinkronisasi ----------
+
+const emptySync = null as SyncConfig | null;
+
+export function useSyncConfig(): SyncConfig | null {
+  return useSyncExternalStore(subscribeSync, getSyncConfig, () => emptySync);
+}
+
+/** Status & aksi sinkron; autoMinutes > 0 → sinkron otomatis saat data lebih tua dari itu. */
+export function useSync(autoMinutes = 0) {
+  const config = useSyncConfig();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await syncNow();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sinkron gagal.");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  const ready = !!config && syncReady(config);
+  const last = config?.lastSyncAt ?? null;
+  useEffect(() => {
+    if (!ready || autoMinutes <= 0) return;
+    const age = last ? (Date.now() - new Date(last).getTime()) / 60000 : Infinity;
+    if (age > autoMinutes) void run();
+    // sekali saat halaman dibuka
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+  return { config, ready, busy, error, run };
 }

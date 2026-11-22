@@ -1,0 +1,7 @@
+{
+  "name": "pace-sync-api",
+  "private": true,
+  "description": "Penghubung kecil Pace ↔ Garmin Connect Personal API & Strava. Menyimpan kunci di server, data tetap di perangkat pengguna.",
+  "type": "module",
+  "engines": { "node": ">=20" }
+}

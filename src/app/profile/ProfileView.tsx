@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { exportData, resetAll, updateProfile, type Profile } from "@/lib/store";
 import { useRun } from "@/lib/usePace";
+import { SyncSettings } from "./SyncSettings";
 
 const MODES = [
   { id: "AUTO", title: "Auto", desc: "Pace langsung menyesuaikan, kamu diberi tahu tiap pagi." },
@@ -75,6 +76,8 @@ export function ProfileView({ profile, runs }: { profile: Profile; runs: number 
           </Button>
         </Card>
       )}
+
+      <SyncSettings />
 
       <Card className="flex flex-col gap-3">
         <h2 className="text-[15px] font-semibold">Lokasi untuk cuaca & AQI</h2>

@@ -3,6 +3,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { DAY_LONG, dayOfWeek, formatKm, formatPace } from "@/lib/engine";
 import { formatDuration, type Dashboard, type DashboardStatus } from "@/lib/store";
+import type { Insight } from "@/lib/engine";
+import { SyncBar } from "@/components/SyncBar";
+import { Insights } from "@/components/Insights";
 import { Card } from "@/components/ui";
 import { IconCheck, IconPlus, IconRefresh } from "@/components/icons";
 
@@ -10,7 +13,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "
 const shortDate = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
 const longDate = (d: string) => `${DAY_LONG[dayOfWeek(d)]}, ${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
 
-export function ProgressView({ d }: { d: Dashboard }) {
+export function ProgressView({ d, insights }: { d: Dashboard; insights: Insight[] }) {
   return (
     <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-12">
       <header className="flex items-end justify-between">
@@ -22,8 +25,10 @@ export function ProgressView({ d }: { d: Dashboard }) {
           <IconPlus size={18} /> Catat lari
         </Link>
       </header>
+      <SyncBar />
       <EventHero d={d} />
       <StatusCard d={d} />
+      <Insights items={insights} />
       <VolumeChart d={d} />
       <PhaseTimeline d={d} />
       {d.goal.raceKm ? <PredictionCard d={d} /> : null}
@@ -302,13 +307,14 @@ function PhaseTimeline({ d }: { d: Dashboard }) {
             );
           })}
         </div>
-        <div className="mt-1.5 flex gap-0.5 text-[10px] text-muted">
+        <ul className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
           {d.plan.phases.map((p) => (
-            <span key={p.phase + p.startWeek} className="text-center" style={{ flexGrow: p.endWeek - p.startWeek + 1, flexBasis: 0 }}>
-              {p.startWeek === p.endWeek ? `M${p.startWeek}` : `M${p.startWeek}–${p.endWeek}`}
-            </span>
+            <li key={p.phase + p.startWeek} className={`flex items-center gap-1.5 ${p.phase === d.plan.phase ? "font-semibold text-ink" : ""}`}>
+              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: PHASE_SHADE[p.phase] }} aria-hidden="true" />
+              {p.label} {p.startWeek === p.endWeek ? `M${p.startWeek}` : `M${p.startWeek}–${p.endWeek}`}
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </Card>
   );
@@ -459,7 +465,15 @@ function RecentRuns({ d }: { d: Dashboard }) {
           {d.recent.map((a, i) => (
             <li key={a.id} className={`flex items-center gap-3 py-3 ${i < d.recent.length - 1 ? "border-b border-[#f0eee9]" : ""}`}>
               <span className="w-14 text-[12px] text-muted">{shortDate(a.date)}</span>
-              <span className="flex-1 text-[15px] font-semibold tabular-nums">{formatKm(a.distanceKm)} km</span>
+              <span className="flex flex-1 flex-col">
+                <span className="text-[15px] font-semibold tabular-nums">{formatKm(a.distanceKm)} km</span>
+                {a.source && a.source !== "MANUAL" && (
+                  <span className="text-[11px] text-muted">
+                    {(a.externalIds ?? []).map((x) => (x.startsWith("GARMIN") ? "Garmin" : "Strava")).join(" + ") || (a.source === "GARMIN" ? "Garmin" : "Strava")}
+                    {a.avgHr ? ` · HR ${a.avgHr}` : ""}
+                  </span>
+                )}
+              </span>
               <span className="text-[13px] tabular-nums text-muted">{formatPace(a.durationSec / a.distanceKm)}/km</span>
               {a.pain ? (
                 <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent-ink">{PAIN[a.pain]}</span>
