@@ -16,7 +16,7 @@ export async function garminToken(force = false): Promise<string> {
   if (!force && cached && Date.now() - cached.at < TOKEN_TTL_MS) return cached.token;
   const res = await fetch(`${base()}/personalapitoken-service/personal-api/personal-api-key/token`, {
     method: "POST",
-    headers: { Authorization: `ApiKey ${key}`, Accept: "application/json" },
+    headers: { Authorization: `ApiKey ${key}`, Accept: "*/*" },
   });
   const text = await res.text();
   if (!res.ok) throw new Error(`Garmin menolak API key (${res.status}). Cek key belum kedaluwarsa.`);
@@ -33,7 +33,7 @@ export async function garminToken(force = false): Promise<string> {
 }
 
 async function get(path: string, token: string): Promise<unknown> {
-  const res = await fetch(`${base()}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+  const res = await fetch(`${base()}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json, */*" } });
   if (res.status === 204) return null;
   if (!res.ok) throw Object.assign(new Error(`Garmin ${path.split("?")[0]} → ${res.status}`), { status: res.status });
   return res.json();
