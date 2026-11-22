@@ -1,5 +1,5 @@
-import { ISO, addDaysIso, json, preflight, readJson, requireKey } from "../../lib/http";
-import { stravaConfigured, syncStrava } from "../../lib/strava";
+import { ISO, addDaysIso, json, preflight, readJson, requireKey } from "../../lib/http.js";
+import { stravaConfigured, syncStrava } from "../../lib/strava.js";
 
 export const OPTIONS = preflight;
 

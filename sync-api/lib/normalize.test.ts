@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeGarminActivities, normalizeGarminHrZones, normalizeGarminSignals, normalizeStravaActivities, pickAccessToken } from "./normalize";
+import { normalizeGarminActivities, normalizeGarminHrZones, normalizeGarminSignals, normalizeStravaActivities, pickAccessToken } from "./normalize.js";
 
 describe("Garmin", () => {
   it("aktivitas lari dinormalisasi, non-lari dibuang", () => {

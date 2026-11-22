@@ -1,5 +1,5 @@
-import { json } from "../../lib/http";
-import { authorizeUrl, stravaConfigured } from "../../lib/strava";
+import { json } from "../../lib/http.js";
+import { authorizeUrl, stravaConfigured } from "../../lib/strava.js";
 
 /** Arahkan ke halaman izin Strava. Callback kembali ke /api/strava/callback di server ini. */
 export async function GET(req: Request) {

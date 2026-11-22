@@ -1,5 +1,5 @@
-import { env } from "./http";
-import { normalizeStravaActivities, type SyncResult } from "./normalize";
+import { env } from "./http.js";
+import { normalizeStravaActivities, type SyncResult } from "./normalize.js";
 
 /**
  * Strava OAuth 2.0 (https://developers.strava.com/docs/authentication/).

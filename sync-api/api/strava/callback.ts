@@ -1,5 +1,5 @@
-import { env } from "../../lib/http";
-import { exchangeCode } from "../../lib/strava";
+import { env } from "../../lib/http.js";
+import { exchangeCode } from "../../lib/strava.js";
 
 /**
  * Tukar kode OAuth → token, lalu kembali ke Pace dengan refresh token di fragmen URL (#),

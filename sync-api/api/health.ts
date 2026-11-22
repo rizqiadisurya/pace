@@ -1,5 +1,5 @@
-import { env, json, preflight, requireKey } from "../lib/http";
-import { stravaConfigured } from "../lib/strava";
+import { env, json, preflight, requireKey } from "../lib/http.js";
+import { stravaConfigured } from "../lib/strava.js";
 
 export const OPTIONS = preflight;
 

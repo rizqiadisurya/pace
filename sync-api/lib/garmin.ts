@@ -1,5 +1,5 @@
-import { env } from "./http";
-import { normalizeGarminActivities, normalizeGarminHrZones, normalizeGarminSignals, pickAccessToken, type SyncResult } from "./normalize";
+import { env } from "./http.js";
+import { normalizeGarminActivities, normalizeGarminHrZones, normalizeGarminSignals, pickAccessToken, type SyncResult } from "./normalize.js";
 
 /**
  * Garmin Connect Personal API (https://developer.garmin.com/gc-developer-program/personal/).

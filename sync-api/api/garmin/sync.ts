@@ -1,5 +1,5 @@
-import { ISO, addDaysIso, json, preflight, readJson, requireKey } from "../../lib/http";
-import { syncGarmin } from "../../lib/garmin";
+import { ISO, addDaysIso, json, preflight, readJson, requireKey } from "../../lib/http.js";
+import { syncGarmin } from "../../lib/garmin.js";
 
 export const OPTIONS = preflight;
 
