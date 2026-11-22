@@ -30,6 +30,8 @@ export function SyncSettings() {
 
   if (!config) return null;
   const connected = !!config.apiUrl && !!config.key;
+  const showStrava = !!config.stravaAvailable || !!config.stravaRefresh;
+  const title = showStrava ? "Garmin & Strava" : "Garmin";
 
   async function save() {
     setBusy(true);
@@ -38,10 +40,10 @@ export function SyncSettings() {
       const url = apiUrl.trim().replace(/\/+$/, "");
       if (!/^https:\/\//.test(url) && !/^http:\/\/localhost(:\d+)?$/.test(url)) throw new Error("Alamat harus diawali https://");
       const h = await testConnection(url, key.trim());
-      setSyncConfig({ apiUrl: url, key: key.trim(), garminEnabled: h.garmin, stravaEnabled: h.strava && !!config!.stravaRefresh });
+      setSyncConfig({ apiUrl: url, key: key.trim(), garminEnabled: h.garmin, stravaEnabled: h.strava && !!config!.stravaRefresh, stravaAvailable: h.strava });
       setMsg({
         ok: true,
-        text: `Terhubung. Garmin ${h.garmin ? "siap" : "belum diatur di server"} · Strava ${h.strava ? "siap untuk dihubungkan" : "belum diatur di server"}.`,
+        text: `Terhubung. Garmin ${h.garmin ? "siap" : "belum diatur di server"}${h.strava ? " · Strava siap untuk dihubungkan" : ""}.`,
       });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Gagal terhubung." });
@@ -66,7 +68,7 @@ export function SyncSettings() {
   return (
     <Card className="flex flex-col gap-3">
       <div id="sinkron" className="scroll-mt-6">
-        <h2 className="text-[15px] font-semibold">Sinkronisasi Garmin & Strava</h2>
+        <h2 className="text-[15px] font-semibold">Sinkronisasi {title}</h2>
         <p className="text-[13px] leading-relaxed text-muted">
           Lari, tidur, dan HRV masuk otomatis lewat sync API milikmu sendiri. Data tetap tersimpan di perangkat ini.
         </p>
@@ -87,21 +89,24 @@ export function SyncSettings() {
       {connected && (
         <div className="flex flex-col gap-2 border-t border-line-soft pt-3">
           <Row label="Garmin" value={config.garminEnabled ? "Aktif" : "Belum diatur di server (GARMIN_API_KEY)"} ok={config.garminEnabled} />
-          <Row
-            label="Strava"
-            value={config.stravaRefresh ? `Terhubung${config.stravaAthlete ? ` sebagai ${config.stravaAthlete}` : ""}` : "Belum terhubung"}
-            ok={!!config.stravaRefresh}
-          />
+          {showStrava && (
+            <Row
+              label="Strava"
+              value={config.stravaRefresh ? `Terhubung${config.stravaAthlete ? ` sebagai ${config.stravaAthlete}` : ""}` : "Belum terhubung"}
+              ok={!!config.stravaRefresh}
+            />
+          )}
           <div className="flex gap-2">
-            {config.stravaRefresh ? (
-              <Button variant="ghost" className="flex-1" onClick={() => setSyncConfig({ stravaRefresh: null, stravaAthlete: null, stravaEnabled: false })}>
-                Putuskan Strava
-              </Button>
-            ) : (
-              <a href={stravaConnectUrl(config)} className="inline-flex h-12 flex-1 items-center justify-center rounded-[14px] bg-[#fc4c02] text-[15px] font-semibold text-white">
-                Hubungkan Strava
-              </a>
-            )}
+            {showStrava &&
+              (config.stravaRefresh ? (
+                <Button variant="ghost" className="flex-1" onClick={() => setSyncConfig({ stravaRefresh: null, stravaAthlete: null, stravaEnabled: false })}>
+                  Putuskan Strava
+                </Button>
+              ) : (
+                <a href={stravaConnectUrl(config)} className="inline-flex h-12 flex-1 items-center justify-center rounded-[14px] bg-[#fc4c02] text-[15px] font-semibold text-white">
+                  Hubungkan Strava
+                </a>
+              ))}
             <Button className="flex-1" disabled={busy || (!config.garminEnabled && !config.stravaRefresh)} onClick={() => void syncAll()}>
               Sinkron sekarang
             </Button>

@@ -14,6 +14,8 @@ export interface SyncConfig {
   stravaAthlete: string | null;
   garminEnabled: boolean;
   stravaEnabled: boolean;
+  /** Server punya STRAVA_CLIENT_ID/SECRET. Strava disembunyikan di UI bila false. */
+  stravaAvailable?: boolean;
   lastSyncAt: string | null;
   lastSummary: ImportSummary | null;
   lastError: string | null;

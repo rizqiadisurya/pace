@@ -19,7 +19,7 @@ export function SyncBar({ autoMinutes = 0 }: { autoMinutes?: number }) {
   if (!ready)
     return (
       <Link href="/profile/#sinkron" className="flex min-h-11 items-center gap-2 rounded-[14px] border border-dashed border-line px-3.5 py-2.5 text-[13px] text-muted">
-        <IconRefresh size={16} /> Sambungkan Garmin & Strava supaya lari dan tidurmu masuk otomatis
+        <IconRefresh size={16} /> Sambungkan Garmin supaya lari dan tidurmu masuk otomatis
       </Link>
     );
   const sources = [config.garminEnabled && "Garmin", config.stravaEnabled && config.stravaRefresh && "Strava"].filter(Boolean).join(" + ");
