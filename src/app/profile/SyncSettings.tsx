@@ -78,7 +78,7 @@ export function SyncSettings() {
       </label>
       <label className="flex flex-col gap-1.5 text-[13px] font-medium text-muted">
         Kata sandi sinkron
-        <input className={field} type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="SYNC_PASSPHRASE di Vercel" autoComplete="off" />
+        <input className={field} type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Kata sandi sinkron" autoComplete="off" />
       </label>
       <Button variant="outline" disabled={busy || !apiUrl || !key} onClick={() => void save()}>
         {connected ? "Simpan & tes ulang" : "Simpan & tes koneksi"}
