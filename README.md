@@ -32,7 +32,7 @@ src/
 ├─ lib/store.ts     Store local-first: profil, rencana, sinyal, aktivitas, adjustment (Undo) di localStorage
 ├─ lib/usePace.ts   Hook React: state reaktif, runner aksi, saran jam lari dari Open-Meteo (cuaca + AQI)
 ├─ components/      UI primitives, tab bar, guard profil
-└─ app/             Halaman: onboarding, today, today/skip, checkin, plan, profile
+└─ app/             Halaman: onboarding, today, today/skip, checkin, plan, progress (dashboard), profile
 ```
 
 ### Siklus agent harian
@@ -51,6 +51,19 @@ Cuaca dan AQI (Open-Meteo, dipanggil langsung dari browser) hanya menghasilkan s
 - Comeback mode (break ≥ 4 minggu): 2–3 minggu awal hanya easy + strides, volume mulai 50%.
 - Nyeri 2× berturut-turut → semua sesi kualitas minggu itu diganti easy.
 - Skip/swap tidak pernah menambah volume; sesi tanpa slot aman didrop, bukan ditumpuk.
+
+## Dashboard Progres
+
+Halaman **Progres** merangkum persiapan menuju event target:
+
+- Hitung mundur ke hari race, minggu ke-berapa, fase, dan target waktu finish.
+- Status kesiapan dari kepatuhan 4 minggu terakhir (On track ≥ 75%, perlu konsisten 50–74%, tertinggal < 50%).
+- Volume mingguan sebagai bullet chart: lintasan = km rencana, isian = km dijalani (ketuk batang untuk detail).
+- Linimasa fase (Comeback → Base → Build → Peak → Taper) dengan penanda posisi saat ini.
+- Prediksi waktu finish (rumus Riegel) dari lari terbaik ≥ 3 km dalam 6 minggu terakhir, dibandingkan target.
+- Long run terjauh, minggu konsisten berturut-turut, total km, tren readiness 14 hari, dan 5 lari terakhir.
+
+Logikanya ada di `dashboardFrom()` (src/lib/store.ts) dan dites di `store.test.ts`.
 
 ## Untuk riset Fase 0
 

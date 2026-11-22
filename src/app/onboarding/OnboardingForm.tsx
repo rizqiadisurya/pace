@@ -31,6 +31,7 @@ export function OnboardingForm() {
     name: "",
     goalType: "HM" as Goal,
     raceDate: "",
+    eventName: "",
     targetPace: null as number | null,
     easyPace: 420,
     baseWeeklyKm: "15",
@@ -57,6 +58,7 @@ export function OnboardingForm() {
     try {
       createProfile({
         name: f.name,
+        eventName: f.eventName,
         goalType: f.goalType,
         raceDate: f.goalType === "RETURN" ? null : f.raceDate,
         targetPaceSec: f.targetPace,
@@ -112,6 +114,10 @@ export function OnboardingForm() {
             </div>
             {f.goalType !== "RETURN" && (
               <div className="flex flex-col gap-4">
+                <label className={label}>
+                  Nama event (opsional)
+                  <input className={input} value={f.eventName} onChange={(e) => set("eventName", e.target.value)} placeholder="mis. Jakarta Marathon 2027" maxLength={60} />
+                </label>
                 <label className={label}>
                   Tanggal race
                   <input type="date" className={input} value={f.raceDate} onChange={(e) => set("raceDate", e.target.value)} />

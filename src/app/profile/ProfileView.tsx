@@ -15,6 +15,7 @@ export function ProfileView({ profile, runs }: { profile: Profile; runs: number 
   const router = useRouter();
   const { run, error } = useRun();
   const [msg, setMsg] = useState<string | null>(null);
+  const [eventName, setEventName] = useState(profile.eventName ?? "");
 
   function download() {
     const blob = new Blob([exportData()], { type: "application/json" });
@@ -50,6 +51,30 @@ export function ProfileView({ profile, runs }: { profile: Profile; runs: number 
           </label>
         ))}
       </fieldset>
+
+      {profile.goalType !== "RETURN" && (
+        <Card className="flex flex-col gap-3">
+          <h2 className="text-[15px] font-semibold">Nama event</h2>
+          <input
+            className="h-12 w-full rounded-xl border border-line bg-surface px-3.5 text-base text-ink"
+            value={eventName}
+            onChange={(e) => setEventName(e.target.value)}
+            placeholder="mis. Jakarta Marathon 2027"
+            maxLength={60}
+            aria-label="Nama event"
+          />
+          <Button
+            variant="outline"
+            disabled={eventName.trim() === (profile.eventName ?? "")}
+            onClick={() => {
+              run(() => updateProfile({ eventName: eventName.trim() || null }));
+              setMsg("Nama event disimpan.");
+            }}
+          >
+            Simpan nama event
+          </Button>
+        </Card>
+      )}
 
       <Card className="flex flex-col gap-3">
         <h2 className="text-[15px] font-semibold">Lokasi untuk cuaca & AQI</h2>

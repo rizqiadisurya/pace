@@ -96,3 +96,53 @@ describe("store (local-first)", () => {
     expect(store.load().profile).toBeNull();
   });
 });
+
+describe("dashboard", () => {
+  beforeEach(() => setup());
+
+  it("awal: status EARLY, countdown dan fase terisi", () => {
+    const d = store.dashboardFrom(store.load(), NOW);
+    expect(d.status).toBe("EARLY");
+    expect(d.goal.daysLeft).toBe(111); // 9 Nov 2026 → 28 Feb 2027
+    expect(d.plan.week).toBe(1);
+    expect(d.plan.totalWeeks).toBe(16);
+    expect(d.plan.phases.map((p) => p.phase)).toEqual(["BASE", "BUILD", "PEAK", "TAPER"]);
+    expect(d.weeks[0].isCurrent).toBe(true);
+    expect(d.goal.targetTimeSec).toBeCloseTo(360 * 21.0975);
+    expect(d.prediction).toBeNull();
+  });
+
+  it("riegel: 10 km 60:00 → HM ±2:12:23", () => {
+    expect(Math.round(store.riegel(10, 3600, 21.0975))).toBe(7943);
+    expect(store.formatDuration(7943)).toBe("2:12:23");
+    expect(store.formatDuration(3130)).toBe("52:10");
+  });
+
+  it("menghitung km selesai per minggu, prediksi, dan kepatuhan", () => {
+    // tiga lari di minggu lalu (tanggal 7–8 Nov, di luar rencana) + satu sesi hari ini
+    store.checkIn({ date: "2026-11-07", distanceKm: 5, durationSec: 1950, rpe: 4 }, NOW);
+    store.checkIn({ date: "2026-11-08", distanceKm: 8, durationSec: 3300, rpe: 5 }, NOW);
+    const today = store.load().workouts.find((w) => w.date === "2026-11-09")!;
+    store.checkIn({ workoutId: today.id, distanceKm: 6, durationSec: 2160, rpe: 6 }, NOW);
+    const d = store.dashboardFrom(store.load(), NOW);
+    expect(d.weeks[0].doneKm).toBe(6);
+    expect(d.totals).toEqual({ runs: 3, km: 19 });
+    expect(d.adherence).toEqual({ done: 1, planned: 1, pct: 100 });
+    expect(d.prediction?.basedOn.distanceKm).toBe(6);
+    expect(d.longRun.longestRecentKm).toBe(8);
+    expect(d.streakWeeks).toBe(2);
+    expect(d.recent[0].distanceKm).toBe(6);
+  });
+
+  it("goal RETURN: tanpa countdown dan prediksi", () => {
+    store.__resetForTests();
+    store.createProfile(
+      { name: "R", goalType: "RETURN", raceDate: null, targetPaceSec: null, easyPaceSec: 450, baseWeeklyKm: 10, weeksOff: 6, availableDays: [1, 3, 5], longRunDay: 5, autonomy: "ASK" },
+      NOW,
+    );
+    const d = store.dashboardFrom(store.load(), NOW);
+    expect(d.goal.daysLeft).toBeNull();
+    expect(d.goal.raceKm).toBeNull();
+    expect(d.prediction).toBeNull();
+  });
+});

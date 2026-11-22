@@ -32,6 +32,8 @@ export type Pain = "KNEE" | "SHIN_CALF" | "OTHER";
 export interface Profile {
   id: string;
   name: string;
+  /** Nama event target, mis. "Jakarta Marathon 2027" */
+  eventName?: string | null;
   goalType: GoalType;
   raceDate: string | null;
   targetPaceSec: number | null;
@@ -216,6 +218,7 @@ export function createProfile(input: ProfileInput, now?: Date): Profile {
     ...input,
     id: uid(),
     name: input.name.trim(),
+    eventName: input.goalType === "RETURN" ? null : input.eventName?.trim() || null,
     raceDate: input.goalType === "RETURN" ? null : input.raceDate,
     availableDays: [...new Set(input.availableDays)].sort((a, b) => a - b),
     latitude: input.latitude ?? -6.2088,
@@ -229,7 +232,7 @@ export function createProfile(input: ProfileInput, now?: Date): Profile {
   return profile;
 }
 
-export function updateProfile(patch: Partial<Pick<Profile, "autonomy" | "latitude" | "longitude" | "name">>) {
+export function updateProfile(patch: Partial<Pick<Profile, "autonomy" | "latitude" | "longitude" | "name" | "eventName">>) {
   const s = load();
   commit({ ...s, profile: { ...requireProfile(s), ...patch } });
 }
@@ -529,3 +532,138 @@ export function briefFrom(s: State, now?: Date) {
 }
 
 export type Brief = ReturnType<typeof briefFrom>;
+
+// ---------- dashboard progres menuju event ----------
+
+export const RACE_KM: Record<GoalType, number | null> = { "10K": 10, HM: 21.0975, FM: 42.195, RETURN: null };
+export const GOAL_LABEL: Record<GoalType, string> = { "10K": "10K", HM: "Half marathon", FM: "Marathon", RETURN: "Kembali rutin lari" };
+const PHASE_LABEL: Record<Workout["phase"], string> = { COMEBACK: "Comeback", BASE: "Base", BUILD: "Build", PEAK: "Peak", TAPER: "Taper" };
+
+/** Prediksi waktu finish (rumus Riegel, eksponen 1,06) dari satu lari. */
+export function riegel(distanceKm: number, durationSec: number, targetKm: number): number {
+  return durationSec * Math.pow(targetKm / distanceKm, 1.06);
+}
+
+export type DashboardStatus = "EARLY" | "ON_TRACK" | "INCONSISTENT" | "BEHIND";
+
+export function dashboardFrom(s: State, now?: Date) {
+  const p = requireProfile(s);
+  const today = todayOf(p, now);
+  const raceKm = RACE_KM[p.goalType];
+  const runs = (w: Workout) => w.type !== "REST" && w.type !== "MOBILITY";
+
+  // Minggu-minggu rencana
+  const byWeek = new Map<number, Workout[]>();
+  for (const w of [...s.workouts].sort((a, b) => a.date.localeCompare(b.date))) byWeek.set(w.week, [...(byWeek.get(w.week) ?? []), w]);
+  const doneKmByWorkout = new Map<string, number>();
+  for (const a of s.activities) if (a.workoutId) doneKmByWorkout.set(a.workoutId, (doneKmByWorkout.get(a.workoutId) ?? 0) + a.distanceKm);
+  const weeks = [...byWeek.entries()].map(([week, ws]) => {
+    const start = weekStart(ws[0].date);
+    const end = addDays(start, 6);
+    const plannedKm = ws.filter((w) => runs(w) && w.status !== "DROPPED").reduce((t, w) => t + w.distanceKm, 0);
+    // Semua lari tercatat di minggu itu (termasuk di luar rencana)
+    const doneKm = s.activities.filter((a) => a.date >= start && a.date <= end).reduce((t, a) => t + a.distanceKm, 0);
+    return {
+      week,
+      startDate: start,
+      phase: ws[0].phase,
+      plannedKm: Math.round(plannedKm * 10) / 10,
+      doneKm: Math.round(doneKm * 10) / 10,
+      isCurrent: today >= start && today <= end,
+      isFuture: start > today,
+    };
+  });
+  const current = weeks.find((w) => w.isCurrent) ?? (weeks.length && today > weeks[weeks.length - 1].startDate ? weeks[weeks.length - 1] : weeks[0]);
+
+  // Fase sebagai rentang minggu
+  const phases: { phase: Workout["phase"]; label: string; startWeek: number; endWeek: number }[] = [];
+  for (const w of weeks) {
+    const last = phases[phases.length - 1];
+    if (last && last.phase === w.phase) last.endWeek = w.week;
+    else phases.push({ phase: w.phase, label: PHASE_LABEL[w.phase], startWeek: w.week, endWeek: w.week });
+  }
+
+  // Kepatuhan 4 minggu terakhir: sesi lari terjadwal sampai hari ini
+  const windowStart = addDays(today, -27);
+  const due = s.workouts.filter((w) => runs(w) && w.date >= windowStart && w.date <= today && w.status !== "DROPPED");
+  const doneDue = due.filter((w) => w.status === "DONE").length;
+  // Sesi hari ini yang belum dijalani tidak dihitung "terlewat"
+  const missedToday = due.filter((w) => w.date === today && w.status === "PLANNED").length;
+  const denom = due.length - missedToday;
+  const adherence = { done: doneDue, planned: denom, pct: denom > 0 ? Math.round((doneDue / denom) * 100) : null };
+  const status: DashboardStatus =
+    adherence.pct === null || denom < 3 ? "EARLY" : adherence.pct >= 75 ? "ON_TRACK" : adherence.pct >= 50 ? "INCONSISTENT" : "BEHIND";
+
+  // Prediksi finish dari lari terbaik 6 minggu terakhir (>= 3 km)
+  const recentRuns = s.activities.filter((a) => a.date >= addDays(today, -42) && a.date <= today && a.distanceKm >= 3);
+  let prediction: { timeSec: number; basedOn: Activity } | null = null;
+  if (raceKm) {
+    for (const a of recentRuns) {
+      const t = riegel(a.distanceKm, a.durationSec, raceKm);
+      if (!prediction || t < prediction.timeSec) prediction = { timeSec: t, basedOn: a };
+    }
+  }
+  const targetTimeSec = raceKm && p.targetPaceSec ? p.targetPaceSec * raceKm : null;
+
+  // Long run
+  const longestRecentKm = recentRuns.reduce((m, a) => Math.max(m, a.distanceKm), 0);
+  const peakLongKm = s.workouts.filter((w) => w.type === "LONG").reduce((m, w) => Math.max(m, w.distanceKm), 0);
+
+  // Tren readiness 14 hari (hanya hari dengan check-in)
+  const readinessTrend = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(today, i - 13);
+    return { date, score: signalOf(s, date) ? readinessFor(s, date).score : null };
+  });
+
+  // Konsistensi: minggu berturut-turut (sampai minggu lalu / minggu ini) yang ada larinya
+  let streakWeeks = 0;
+  for (let mon = weekStart(today); ; mon = addDays(mon, -7)) {
+    const has = s.activities.some((a) => a.date >= mon && a.date <= addDays(mon, 6));
+    if (has) streakWeeks++;
+    else if (mon !== weekStart(today)) break;
+    if (streakWeeks > 104 || mon < addDays(today, -800)) break;
+  }
+
+  const totalKm = Math.round(s.activities.reduce((t, a) => t + a.distanceKm, 0) * 10) / 10;
+
+  return {
+    today,
+    goal: {
+      type: p.goalType,
+      label: GOAL_LABEL[p.goalType],
+      eventName: p.eventName ?? null,
+      raceDate: p.raceDate,
+      raceKm,
+      daysLeft: p.raceDate ? diffDays(p.raceDate, today) : null,
+      targetPaceSec: p.targetPaceSec,
+      targetTimeSec,
+    },
+    plan: {
+      week: current?.week ?? 0,
+      totalWeeks: weeks.length,
+      phase: current?.phase ?? null,
+      phaseLabel: current ? PHASE_LABEL[current.phase] : null,
+      phases,
+    },
+    weeks,
+    adherence,
+    status,
+    prediction,
+    longRun: { longestRecentKm, peakLongKm },
+    readinessTrend,
+    streakWeeks,
+    totals: { runs: s.activities.length, km: totalKm },
+    recent: [...s.activities].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5),
+  };
+}
+
+export type Dashboard = ReturnType<typeof dashboardFrom>;
+
+/** Format durasi detik → "1:58:30" atau "52:10". */
+export function formatDuration(sec: number): string {
+  const t = Math.round(sec);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const ss = t % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}` : `${m}:${String(ss).padStart(2, "0")}`;
+}
